@@ -1,6 +1,6 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import plotly.express as px
 import streamlit as st
 
 
@@ -105,103 +105,134 @@ def add_value_labels(frame, metric):
 PLATFORM_COLORS = {
     "facebook": "#1877F2",
     "google": "#34A853",
-    "tiktok": "#111111",
+    "tiktok": "#25F4EE",
 }
 
 
-def platform_color(platform):
-    return PLATFORM_COLORS.get(platform, "#666666")
-
-
-def style_axis(ax):
-    ax.grid(axis="y", alpha=0.25)
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
+def chart_title(title, subtitle):
+    return f"{title}<br><sup>{subtitle}</sup>"
 
 
 def render_line_chart(frame, metric, title, subtitle):
     metric_name = metric_label(metric)
     chart = add_value_labels(frame, metric)
 
-    fig, ax = plt.subplots(figsize=(12, 4.8))
-    ax.plot(chart["date"], chart[metric], marker="o", linewidth=2.5, label=metric_name)
-
-    for row in chart.itertuples(index=False):
-        ax.annotate(
-            row.value_label,
-            (row.date, getattr(row, metric)),
-            textcoords="offset points",
-            xytext=(0, 8),
-            ha="center",
-            fontsize=8,
-        )
-
-    ax.set_title(f"{title}\n{subtitle}", loc="left", fontsize=13, pad=16)
-    ax.set_xlabel("Date")
-    ax.set_ylabel(metric_name)
-    ax.legend(title="Metric")
-    style_axis(ax)
-    fig.autofmt_xdate()
-    fig.tight_layout()
-    st.pyplot(fig)
+    fig = px.line(
+        chart,
+        x="date",
+        y=metric,
+        markers=True,
+        text="value_label",
+        title=chart_title(title, subtitle),
+        labels={"date": "Date", metric: metric_name},
+    )
+    fig.update_traces(
+        line=dict(width=3, color="#4E79A7"),
+        marker=dict(size=7),
+        textposition="top center",
+        name=metric_name,
+        showlegend=False,
+    )
+    fig.update_layout(
+        hovermode="x unified",
+        margin=dict(t=90, r=30, b=50, l=60),
+        yaxis_title=metric_name,
+        xaxis_title="Date",
+    )
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_vertical_bar_chart(frame, metric, title, subtitle):
     metric_name = metric_label(metric)
     chart = add_value_labels(frame, metric)
-    colors = [platform_color(platform) for platform in chart["platform"]]
 
-    fig, ax = plt.subplots(figsize=(7, 4.8))
-    bars = ax.bar(chart["platform"], chart[metric], color=colors)
-
-    for bar, label in zip(bars, chart["value_label"]):
-        ax.annotate(
-            label,
-            (bar.get_x() + bar.get_width() / 2, bar.get_height()),
-            textcoords="offset points",
-            xytext=(0, 6),
-            ha="center",
-            fontsize=9,
-        )
-
-    ax.set_title(f"{title}\n{subtitle}", loc="left", fontsize=12, pad=14)
-    ax.set_xlabel("Platform")
-    ax.set_ylabel(metric_name)
-    style_axis(ax)
-    fig.tight_layout()
-    st.pyplot(fig)
+    fig = px.bar(
+        chart,
+        x="platform",
+        y=metric,
+        color="platform",
+        text="value_label",
+        color_discrete_map=PLATFORM_COLORS,
+        title=chart_title(title, subtitle),
+        labels={"platform": "Platform", metric: metric_name},
+    )
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    fig.update_layout(
+        legend_title_text="Platform",
+        margin=dict(t=90, r=30, b=50, l=60),
+        yaxis_title=metric_name,
+        xaxis_title="Platform",
+    )
+    st.plotly_chart(fig, width="stretch")
 
 
 def render_horizontal_campaign_chart(frame, metric, title, subtitle):
     metric_name = metric_label(metric)
     chart = add_value_labels(frame, metric)
-    colors = [platform_color(platform) for platform in chart["platform"]]
 
-    fig, ax = plt.subplots(figsize=(12, 6))
-    bars = ax.barh(chart["campaign_name"], chart[metric], color=colors)
+    fig = px.bar(
+        chart,
+        x=metric,
+        y="campaign_name",
+        color="platform",
+        orientation="h",
+        text="value_label",
+        color_discrete_map=PLATFORM_COLORS,
+        title=chart_title(title, subtitle),
+        labels={"campaign_name": "Campaign", metric: metric_name, "platform": "Platform"},
+    )
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    fig.update_layout(
+        legend_title_text="Platform",
+        margin=dict(t=90, r=50, b=50, l=40),
+        xaxis_title=metric_name,
+        yaxis_title=None,
+    )
+    st.plotly_chart(fig, width="stretch")
 
-    for bar, label in zip(bars, chart["value_label"]):
-        ax.annotate(
-            label,
-            (bar.get_width(), bar.get_y() + bar.get_height() / 2),
-            textcoords="offset points",
-            xytext=(6, 0),
-            va="center",
-            fontsize=9,
-        )
 
-    legend_platforms = chart["platform"].drop_duplicates()
-    handles = [
-        plt.Line2D([0], [0], marker="s", color="w", markerfacecolor=platform_color(platform), markersize=10)
-        for platform in legend_platforms
-    ]
-    ax.legend(handles, legend_platforms, title="Platform")
-    ax.set_title(f"{title}\n{subtitle}", loc="left", fontsize=13, pad=16)
-    ax.set_xlabel(metric_name)
-    ax.set_ylabel("")
-    style_axis(ax)
-    fig.tight_layout()
-    st.pyplot(fig)
+def make_display_table(frame):
+    table = frame.copy()
+    table = table[[
+        "platform",
+        "campaign_name",
+        "spend",
+        "impressions",
+        "clicks",
+        "conversions",
+        "revenue",
+        "ctr",
+        "cpc",
+        "conversion_rate",
+        "cpa",
+        "roas",
+    ]]
+    table["spend"] = table["spend"].map(lambda value: format_chart_value(value, "spend"))
+    table["impressions"] = table["impressions"].map(lambda value: format_chart_value(value, "impressions"))
+    table["clicks"] = table["clicks"].map(lambda value: format_chart_value(value, "clicks"))
+    table["conversions"] = table["conversions"].map(lambda value: format_chart_value(value, "conversions"))
+    table["revenue"] = table["revenue"].map(lambda value: format_chart_value(value, "revenue"))
+    table["ctr"] = table["ctr"].map(lambda value: format_chart_value(value, "ctr"))
+    table["cpc"] = table["cpc"].map(lambda value: format_chart_value(value, "cpc"))
+    table["conversion_rate"] = table["conversion_rate"].map(lambda value: format_chart_value(value, "conversion_rate"))
+    table["cpa"] = table["cpa"].map(lambda value: format_chart_value(value, "cpa"))
+    table["roas"] = table["roas"].map(lambda value: format_chart_value(value, "roas"))
+    return table.rename(
+        columns={
+            "platform": "Platform",
+            "campaign_name": "Campaign",
+            "spend": "Spend",
+            "impressions": "Impressions",
+            "clicks": "Clicks",
+            "conversions": "Conversions",
+            "revenue": "Revenue",
+            "ctr": "CTR",
+            "cpc": "CPC",
+            "conversion_rate": "Conversion Rate",
+            "cpa": "CPA",
+            "roas": "ROAS",
+        }
+    )
 
 
 data = load_data()
@@ -357,34 +388,10 @@ render_horizontal_campaign_chart(
     "Largest budget lines are the first candidates for efficiency review.",
 )
 
-display_cols = [
-    "platform",
-    "campaign_name",
-    "spend",
-    "impressions",
-    "clicks",
-    "conversions",
-    "revenue",
-    "ctr",
-    "cpc",
-    "conversion_rate",
-    "cpa",
-    "roas",
-]
-
 st.dataframe(
-    campaign_summary[display_cols],
+    make_display_table(campaign_summary),
     width="stretch",
     hide_index=True,
-    column_config={
-        "spend": st.column_config.NumberColumn("Spend", format="$%.2f"),
-        "revenue": st.column_config.NumberColumn("Revenue", format="$%.2f"),
-        "ctr": st.column_config.NumberColumn("CTR", format="%.2%"),
-        "cpc": st.column_config.NumberColumn("CPC", format="$%.2f"),
-        "conversion_rate": st.column_config.NumberColumn("Conversion Rate", format="%.2%"),
-        "cpa": st.column_config.NumberColumn("CPA", format="$%.2f"),
-        "roas": st.column_config.NumberColumn("ROAS", format="%.2f"),
-    },
 )
 
 st.caption("Revenue and ROAS are meaningful only where revenue is available in the source data.")
